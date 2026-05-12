@@ -132,8 +132,8 @@ export function DebugPanel() {
                 <span className={statusStyles[event.status]}>{event.status}</span>
               </div>
             </div>
-            <div className="mt-2 text-zinc-100">{getEventSummary(event)}</div>
-            <div className="mt-1 text-zinc-500">
+            <div className="mt-2 text-zinc-100 truncate">{getEventSummary(event)}</div>
+            <div className="mt-1 text-zinc-500 truncate">
               id={event.id}
               {event.duration !== undefined ? ` | duration=${event.duration}ms` : ""}
             </div>

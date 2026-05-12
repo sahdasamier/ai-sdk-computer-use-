@@ -1,12 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { GripHorizontal, GripVertical } from "lucide-react";
+import { useState } from "react";
+import { GripHorizontal, GripVertical, LayoutList, MessageSquare, Monitor } from "lucide-react";
 import {
   Panel,
   PanelGroup,
   PanelResizeHandle,
 } from "react-resizable-panels";
+import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
   sidebar: ReactNode;
@@ -49,53 +51,96 @@ const ResizeHandle = ({ orientation }: ResizeHandleProps) => {
   );
 };
 
-export function DashboardLayout({
-  sidebar,
-  chat,
-  debug,
-  vnc,
-}: DashboardLayoutProps) {
+type MobileTab = "sessions" | "chat" | "desktop";
+
+const MOBILE_TABS: { id: MobileTab; label: string; Icon: typeof MessageSquare }[] = [
+  { id: "sessions", label: "Sessions", Icon: LayoutList },
+  { id: "chat",     label: "Chat",     Icon: MessageSquare },
+  { id: "desktop",  label: "Desktop",  Icon: Monitor },
+];
+
+export function DashboardLayout({ sidebar, chat, debug, vnc }: DashboardLayoutProps) {
+  const [activeTab, setActiveTab] = useState<MobileTab>("chat");
+
   return (
-    <PanelGroup direction="horizontal" className="h-full w-full">
-      <Panel
-        id="sidebar-panel"
-        order={1}
-        defaultSize={18}
-        minSize={14}
-        maxSize={24}
-        className="min-w-0"
-      >
-        {sidebar}
-      </Panel>
+    <>
+      {/* ── Mobile layout (< lg) ─────────────────────────────────── */}
+      <div className="flex flex-col h-full w-full lg:hidden">
+        {/* Panel area */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <div className={activeTab === "sessions" ? "h-full" : "hidden"}>{sidebar}</div>
+          <div className={activeTab === "chat"     ? "h-full" : "hidden"}>{chat}</div>
+          {activeTab === "desktop" && (
+            <div className="flex flex-col h-full">
+              <div className="flex-1 min-h-0">{vnc}</div>
+              <div className="h-52 min-h-0 border-t border-zinc-800">{debug}</div>
+            </div>
+          )}
+        </div>
 
-      <ResizeHandle orientation="vertical" />
+        {/* Tab bar */}
+        <nav className="flex shrink-0 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+          {MOBILE_TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id)}
+              className={cn(
+                "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+                activeTab === id
+                  ? "text-zinc-900 dark:text-zinc-100"
+                  : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300",
+              )}
+            >
+              <Icon className="h-5 w-5" />
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-      <Panel id="workspace-panel" order={2} defaultSize={42} minSize={26}>
-        <PanelGroup direction="vertical" className="h-full">
-          <Panel id="chat-panel" order={1} defaultSize={74} minSize={40}>
-            {chat}
-          </Panel>
+      {/* ── Desktop layout (lg+) ──────────────────────────────────── */}
+      <PanelGroup direction="horizontal" className="hidden h-full w-full lg:flex">
+        <Panel
+          id="sidebar-panel"
+          order={1}
+          defaultSize={18}
+          minSize={14}
+          maxSize={24}
+          className="min-w-0"
+        >
+          {sidebar}
+        </Panel>
 
-          <ResizeHandle orientation="horizontal" />
+        <ResizeHandle orientation="vertical" />
 
-          <Panel
-            id="debug-panel"
-            order={2}
-            defaultSize={26}
-            minSize={14}
-            collapsible
-            collapsedSize={0}
-          >
-            {debug}
-          </Panel>
-        </PanelGroup>
-      </Panel>
+        <Panel id="workspace-panel" order={2} defaultSize={42} minSize={26}>
+          <PanelGroup direction="vertical" className="h-full">
+            <Panel id="chat-panel" order={1} defaultSize={74} minSize={40}>
+              {chat}
+            </Panel>
 
-      <ResizeHandle orientation="vertical" />
+            <ResizeHandle orientation="horizontal" />
 
-      <Panel id="vnc-panel" order={3} defaultSize={40} minSize={26}>
-        {vnc}
-      </Panel>
-    </PanelGroup>
+            <Panel
+              id="debug-panel"
+              order={2}
+              defaultSize={26}
+              minSize={14}
+              collapsible
+              collapsedSize={0}
+            >
+              {debug}
+            </Panel>
+          </PanelGroup>
+        </Panel>
+
+        <ResizeHandle orientation="vertical" />
+
+        <Panel id="vnc-panel" order={3} defaultSize={40} minSize={26}>
+          {vnc}
+        </Panel>
+      </PanelGroup>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { getSelectedEvent, useAgentStore } from "@/store/useAgentStore";
 import { toast } from "sonner";
 import { useSandboxStore } from "@/store/useSandboxStore";
 import type { AgentEvent, BashEvent, ClickEvent, ScreenshotEvent, TypeEvent, BrowserActionEvent } from "@/types/events";
+import type { ElementType } from "react";
 import {
   ArrowLeft,
   Camera,
@@ -40,7 +41,7 @@ const typeConfig = {
   browser_action: { icon: Waypoints, label: "Browser Action", color: "text-cyan-400" },
 } as const;
 
-function MetaRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function MetaRow({ icon: Icon, label, value }: { icon: ElementType; label: string; value: string }) {
   return (
     <div className="flex items-center gap-2 text-xs">
       <Icon className="h-3 w-3 text-zinc-500 shrink-0" />
@@ -154,10 +155,10 @@ function BrowserDetail({ event }: { event: BrowserActionEvent }) {
           href={event.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors min-w-0"
         >
-          <ExternalLink className="h-3 w-3" />
-          {event.url}
+          <ExternalLink className="h-3 w-3 shrink-0" />
+          <span className="truncate">{event.url}</span>
         </a>
       )}
     </div>
@@ -189,9 +190,9 @@ function EventDetail({ event, onBack }: { event: AgentEvent; onBack: () => void 
           Live
         </button>
         <div className="h-4 w-px bg-zinc-700" />
-        <TypeIcon className={`h-4 w-4 ${typeColor}`} />
-        <span className="text-sm font-medium text-zinc-200">{typeLabel}</span>
-        <div className={`ml-auto flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${statusClass}`}>
+        <TypeIcon className={`h-4 w-4 shrink-0 ${typeColor}`} />
+        <span className="text-sm font-medium text-zinc-200 truncate min-w-0">{typeLabel}</span>
+        <div className={`ml-auto shrink-0 flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${statusClass}`}>
           <StatusIcon className="h-3 w-3" />
           {statusLabel}
         </div>

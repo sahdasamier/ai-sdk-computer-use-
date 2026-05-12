@@ -76,9 +76,7 @@ export function ChatArea() {
   };
 
   const isLoading = status !== "ready";
-  const currentMessages = messages;
-  useEventPipeline(currentMessages, activeSessionId);
-  console.log("Current Messages:", messages);
+  useEventPipeline(messages, activeSessionId);
 
   return (
     <div className="flex flex-col h-full w-full bg-white overflow-hidden">
@@ -91,9 +89,8 @@ export function ChatArea() {
         {messages.length === 0 ? <ProjectInfo /> : null}
         {messages.map((message, index) => (
           <PreviewMessage
-            message={message}
             key={message.id}
-            isLoading={isLoading}
+            message={message}
             status={status}
             isLatestMessage={index === messages.length - 1}
             onToolInvocationClick={setSelectedEventId}
