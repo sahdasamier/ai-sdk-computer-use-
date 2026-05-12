@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -11,9 +11,11 @@ export function Sidebar() {
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
   const createSession = useAgentStore((state) => state.createSession);
   const switchSession = useAgentStore((state) => state.switchSession);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
-    if (sessions.length === 0) {
+    if (sessions.length === 0 && !hasInitialized.current) {
+      hasInitialized.current = true;
       createSession("Session 1");
     }
   }, [createSession, sessions.length]);
@@ -23,7 +25,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="flex h-full min-w-0 flex-col border-r border-zinc-200 bg-zinc-50">
+    <aside className="flex flex-col h-full w-full bg-zinc-50 border-r overflow-hidden">
       <div className="border-b border-zinc-200 p-3">
         <Button onClick={handleCreateSession} className="w-full justify-start gap-2">
           <Plus className="h-4 w-4" />
@@ -31,7 +33,7 @@ export function Sidebar() {
         </Button>
       </div>
 
-      <div className="flex-1 space-y-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {sessions.map((session) => (
           <button
             key={session.id}

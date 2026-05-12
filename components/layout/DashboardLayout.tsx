@@ -56,7 +56,7 @@ export function DashboardLayout({
   vnc,
 }: DashboardLayoutProps) {
   return (
-    <PanelGroup direction="horizontal" className="h-dvh w-full bg-background">
+    <PanelGroup direction="horizontal" className="h-full w-full">
       <Panel
         id="sidebar-panel"
         order={1}

@@ -38,8 +38,9 @@ export interface ScreenshotEvent extends BaseEvent {
 
 export interface BrowserActionEvent extends BaseEvent {
   type: "browser_action";
-  action: "navigate" | "back" | "forward" | "reload";
+  action: "navigate" | "back" | "forward" | "reload" | "scroll" | "other";
   url?: string;
+  detail?: string;
 }
 
 export type AgentEvent =

@@ -7,13 +7,16 @@ import { Input } from "@/components/input";
 import { PreviewMessage } from "@/components/message";
 import { DeployButton, ProjectInfo } from "@/components/project-info";
 import { PromptSuggestions } from "@/components/prompt-suggestions";
+import { useEventPipeline } from "@/hooks/useEventPipeline";
 import { useScrollToBottom } from "@/lib/use-scroll-to-bottom";
 import { ABORTED } from "@/lib/utils";
+import { useAgentStore } from "@/store/useAgentStore";
 import { useSandboxStore } from "@/store/useSandboxStore";
 
 export function ChatArea() {
   const sandboxId = useSandboxStore((state) => state.sandboxId);
   const isInitializing = useSandboxStore((state) => state.isInitializing);
+  const activeSessionId = useAgentStore((state) => state.activeSessionId);
   const [containerRef, endRef] = useScrollToBottom();
 
   const {
@@ -72,15 +75,16 @@ export function ChatArea() {
   };
 
   const isLoading = status !== "ready";
+  useEventPipeline(messages, activeSessionId);
 
   return (
-    <div className="flex h-full min-w-0 flex-col border-r border-zinc-200 bg-white">
+    <div className="flex flex-col h-full w-full bg-white overflow-hidden">
       <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-4">
         <AISDKLogo />
         <DeployButton />
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4" ref={containerRef}>
+      <div className="flex-1 overflow-y-auto p-4" ref={containerRef}>
         {messages.length === 0 ? <ProjectInfo /> : null}
         {messages.map((message, index) => (
           <PreviewMessage

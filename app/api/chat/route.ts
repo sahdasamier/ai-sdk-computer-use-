@@ -1,4 +1,9 @@
-import { anthropic } from "@ai-sdk/anthropic";
+import { createAnthropic } from '@ai-sdk/anthropic';
+
+const packyAnthropic = createAnthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  baseURL: 'https://www.packyapi.com', 
+});
 import { streamText, UIMessage } from "ai";
 import { killDesktop } from "@/lib/sandbox/utils";
 import { bashTool, computerTool } from "@/lib/sandbox/tool";
@@ -12,7 +17,7 @@ export async function POST(req: Request) {
     await req.json();
   try {
     const result = streamText({
-      model: anthropic("claude-sonnet-4-5-20250929"), // Using Sonnet for computer use
+      model: packyAnthropic("claude-sonnet-4-5-20250929"), // Using Sonnet for computer use
       system:
         "You are a helpful assistant with access to a computer. " +
         "Use the computer tool to help the user with their requests. " +

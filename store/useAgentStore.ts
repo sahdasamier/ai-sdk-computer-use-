@@ -17,6 +17,8 @@ const EMPTY_EVENT_COUNTS: EventCounts = {
   screenshot: 0,
   browser_action: 0,
 };
+const EMPTY_EVENTS: AgentEvent[] = [];
+const eventCountsCache = new WeakMap<AgentEvent[], EventCounts>();
 
 interface AgentStoreState {
   sessions: ChatSession[];
@@ -124,10 +126,22 @@ export const getActiveSessionEventCounts = (state: AgentStoreState): EventCounts
   );
   if (!activeSession) return EMPTY_EVENT_COUNTS;
 
-  return activeSession.events.reduce<EventCounts>((acc, event) => {
+  const cachedCounts = eventCountsCache.get(activeSession.events);
+  if (cachedCounts) return cachedCounts;
+
+  const counts = activeSession.events.reduce<EventCounts>((acc, event) => {
     acc[event.type] += 1;
     return acc;
   }, { ...EMPTY_EVENT_COUNTS });
+  eventCountsCache.set(activeSession.events, counts);
+  return counts;
+};
+
+export const getActiveSessionEvents = (state: AgentStoreState): AgentEvent[] => {
+  const activeSession = state.sessions.find(
+    (session) => session.id === state.activeSessionId,
+  );
+  return activeSession?.events ?? EMPTY_EVENTS;
 };
 
 export const useActiveSessionEventCounts = (): EventCounts =>

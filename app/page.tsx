@@ -6,11 +6,13 @@ import { VNCViewer } from "@/components/vnc/VNCViewer";
 
 export default function Page() {
   return (
-    <DashboardLayout
-      sidebar={<Sidebar />}
-      chat={<ChatArea />}
-      debug={<DebugPanel />}
-      vnc={<VNCViewer />}
-    />
+    <main className="h-dvh w-screen overflow-hidden bg-background">
+      <DashboardLayout
+        sidebar={<Sidebar />}
+        chat={<ChatArea />}
+        debug={<DebugPanel />}
+        vnc={<VNCViewer />}
+      />
+    </main>
   );
 }

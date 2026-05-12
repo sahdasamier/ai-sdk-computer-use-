@@ -67,7 +67,7 @@ const VNCViewerComponent = () => {
   }, [sandboxId]);
 
   return (
-    <div className="relative h-full w-full bg-black">
+    <div className="relative flex flex-col h-full w-full bg-zinc-900 overflow-hidden">
       {streamUrl ? (
         <>
           <iframe
