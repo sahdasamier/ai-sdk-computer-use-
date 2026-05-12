@@ -23,6 +23,7 @@ const eventCountsCache = new WeakMap<AgentEvent[], EventCounts>();
 interface AgentStoreState {
   sessions: ChatSession[];
   activeSessionId: string | null;
+  selectedEventId: string | null;
   agentStatus: AgentStatus;
 }
 
@@ -36,6 +37,7 @@ interface AgentStoreActions {
     eventId: string,
     updates: Partial<AgentEvent>,
   ) => void;
+  setSelectedEventId: (eventId: string | null) => void;
   setAgentStatus: (status: AgentStatus) => void;
 }
 
@@ -48,9 +50,14 @@ export const useAgentStore = create<AgentStore>()(
     (set, get) => ({
       sessions: [],
       activeSessionId: null,
+      selectedEventId: null,
       agentStatus: "idle",
       createSession: (title) => {
-        const id = createSessionId();
+        let id = createSessionId();
+        while (get().sessions.some((session) => session.id === id)) {
+          id = createSessionId();
+        }
+
         const newSession: ChatSession = {
           id,
           title,
@@ -59,10 +66,17 @@ export const useAgentStore = create<AgentStore>()(
           messages: [],
         };
 
-        set((state) => ({
-          sessions: [...state.sessions, newSession],
-          activeSessionId: id,
-        }));
+        set((state) => {
+          if (state.sessions.some((session) => session.id === id)) {
+            return state;
+          }
+
+          return {
+            sessions: [...state.sessions, newSession],
+            activeSessionId: id,
+            selectedEventId: null,
+          };
+        });
 
         return id;
       },
@@ -70,17 +84,23 @@ export const useAgentStore = create<AgentStore>()(
         const sessionExists = get().sessions.some((session) => session.id === id);
         if (!sessionExists) return;
 
-        set({ activeSessionId: id });
+        set({ activeSessionId: id, selectedEventId: null });
       },
       deleteSession: (id) => {
         set((state) => {
           const sessions = state.sessions.filter((session) => session.id !== id);
           const activeSessionId =
             state.activeSessionId === id ? (sessions[0]?.id ?? null) : state.activeSessionId;
+          const selectedEventId = sessions
+            .flatMap((session) => session.events)
+            .some((event) => event.id === state.selectedEventId)
+            ? state.selectedEventId
+            : null;
 
           return {
             sessions,
             activeSessionId,
+            selectedEventId,
           };
         });
       },
@@ -107,6 +127,7 @@ export const useAgentStore = create<AgentStore>()(
           }),
         }));
       },
+      setSelectedEventId: (eventId) => set({ selectedEventId: eventId }),
       setAgentStatus: (status) => set({ agentStatus: status }),
     }),
     {
@@ -115,6 +136,7 @@ export const useAgentStore = create<AgentStore>()(
       partialize: (state) => ({
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
+        selectedEventId: state.selectedEventId,
       }),
     },
   ),
@@ -142,6 +164,15 @@ export const getActiveSessionEvents = (state: AgentStoreState): AgentEvent[] => 
     (session) => session.id === state.activeSessionId,
   );
   return activeSession?.events ?? EMPTY_EVENTS;
+};
+
+export const getSelectedEvent = (state: AgentStoreState): AgentEvent | null => {
+  if (!state.activeSessionId || !state.selectedEventId) return null;
+  const activeSession = state.sessions.find(
+    (session) => session.id === state.activeSessionId,
+  );
+  if (!activeSession) return null;
+  return activeSession.events.find((event) => event.id === state.selectedEventId) ?? null;
 };
 
 export const useActiveSessionEventCounts = (): EventCounts =>

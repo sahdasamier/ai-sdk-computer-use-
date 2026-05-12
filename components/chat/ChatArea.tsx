@@ -17,6 +17,7 @@ export function ChatArea() {
   const sandboxId = useSandboxStore((state) => state.sandboxId);
   const isInitializing = useSandboxStore((state) => state.isInitializing);
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
+  const setSelectedEventId = useAgentStore((state) => state.setSelectedEventId);
   const [containerRef, endRef] = useScrollToBottom();
 
   const {
@@ -30,7 +31,7 @@ export function ChatArea() {
     setMessages,
   } = useChat({
     api: "/api/chat",
-    id: sandboxId ?? undefined,
+    id: activeSessionId ?? undefined,
     body: {
       sandboxId,
     },
@@ -75,7 +76,9 @@ export function ChatArea() {
   };
 
   const isLoading = status !== "ready";
-  useEventPipeline(messages, activeSessionId);
+  const currentMessages = messages;
+  useEventPipeline(currentMessages, activeSessionId);
+  console.log("Current Messages:", messages);
 
   return (
     <div className="flex flex-col h-full w-full bg-white overflow-hidden">
@@ -93,6 +96,7 @@ export function ChatArea() {
             isLoading={isLoading}
             status={status}
             isLatestMessage={index === messages.length - 1}
+            onToolInvocationClick={setSelectedEventId}
           />
         ))}
         <div ref={endRef} className="pb-2" />

@@ -13,29 +13,26 @@ export const prunedMessages = (messages: UIMessage[]): UIMessage[] => {
     return messages;
   }
 
-  return messages.map((message) => {
-    // check if last message part is a tool invocation in a call state, then append a part with the tool result
-    message.parts = message.parts.map((part) => {
-      if (part.type === "tool-invocation") {
-        if (
-          part.toolInvocation.toolName === "computer" &&
-          part.toolInvocation.args.action === "screenshot"
-        ) {
-          return {
-            ...part,
-            toolInvocation: {
-              ...part.toolInvocation,
-              result: {
-                type: "text",
-                text: "Image redacted to save input tokens",
-              },
-            },
-          };
-        }
-        return part;
+  // Return a new array with non-mutating map to avoid React state issues.
+  return messages.map((message) => ({
+    ...message,
+    parts: message.parts.map((part) => {
+      if (
+        part.type === "tool-invocation" &&
+        part.toolInvocation.toolName === "computer" &&
+        (part.toolInvocation.args as Record<string, unknown>).action === "screenshot" &&
+        part.toolInvocation.state === "result"
+      ) {
+        // Redact screenshot image data from conversation history to save tokens.
+        return {
+          ...part,
+          toolInvocation: {
+            ...part.toolInvocation,
+            result: "Screenshot captured (image redacted to save tokens)",
+          },
+        };
       }
       return part;
-    });
-    return message;
-  });
+    }),
+  }));
 };

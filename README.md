@@ -1,61 +1,205 @@
 Author: Sahda Samier
-<a href="https://ai-sdk-computer-use.vercel.app">
-  <h1 align="center">AI SDK Computer Use Demo</h1>
-</a>
+
+<h1 align="center">AI SDK Computer Use</h1>
 
 <p align="center">
-  An open-source AI chatbot demonstrating computer use capabilities with Anthropic Claude Sonnet 4.5, Vercel Sandboxes, and the AI SDK by Vercel.
+  A full-stack AI agent that controls a real Linux desktop — taking screenshots, clicking, typing, and running shell commands — all visible in your browser in real time.
 </p>
 
 <p align="center">
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#how-it-works"><strong>How It Works</strong></a> ·
-  <a href="#deploy-your-own"><strong>Deploy Your Own</strong></a> ·
-  <a href="#running-locally"><strong>Running Locally</strong></a>
+  <a href="#features">Features</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#state-management">State Management</a> ·
+  <a href="#event-pipeline">Event Pipeline</a> ·
+  <a href="#running-locally">Running Locally</a> ·
+  <a href="#environment-variables">Environment Variables</a>
 </p>
-<br/>
+
+---
 
 ## Features
 
-- Streaming text responses powered by the [AI SDK](https://sdk.vercel.ai/docs).
-- Anthropic Claude Sonnet 4.5 with [computer use](https://sdk.vercel.ai/docs/guides/computer-use) and bash tool capabilities.
-- Remote desktop environment running in a [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) with Chrome, a window manager, and VNC streaming.
-- [shadcn/ui](https://ui.shadcn.com/) components for a modern, responsive UI powered by [Tailwind CSS](https://tailwindcss.com).
-- Built with the latest [Next.js](https://nextjs.org) App Router.
+- **Computer Use Agent** — Claude controls a real desktop via `screenshot`, `left_click`, `type`, `scroll`, `key`, and `bash` tools.
+- **Live VNC Stream** — The sandbox desktop is streamed to the browser via noVNC inside a resizable iframe.
+- **Tool Event Pipeline** — Every tool call is parsed in real time into a typed `AgentEvent` and displayed in a scrollable Debug Panel with live counters.
+- **Detail View** — Clicking any event in the Debug Panel switches the right panel from the VNC stream to a rich detail card showing the screenshot image, bash output, click coordinates, typed text, duration, and raw JSON payload.
+- **Multi-Session Support** — Multiple named chat sessions, each with their own event history, persisted to `localStorage` via Zustand.
+- **PackyAPI Proxy** — All Anthropic API calls are routed through [PackyAPI](https://www.packyapi.com) as a reverse proxy, keeping the real API key server-side while allowing flexible model routing.
+- **Next.js 15 App Router** — Streaming chat responses over a single `POST /api/chat` route using the Vercel AI SDK `streamText` + `toDataStreamResponse`.
 
-## How It Works
+---
 
-The app spins up a Vercel Sandbox from a pre-built snapshot that includes:
-
-- **Xvnc** — a virtual X11 display server
-- **openbox** — a lightweight window manager
-- **noVNC + websockify** — streams the desktop to the browser via WebSocket
-- **Google Chrome** — auto-launched so the AI agent has a browser ready
-- **xdotool + ImageMagick** — for mouse/keyboard control and screenshots
-
-When a user sends a message, Claude uses the `computer` tool (screenshot, click, type, scroll) and the `bash` tool (run shell commands) to interact with the sandbox desktop. The noVNC stream is displayed in a resizable iframe alongside the chat.
-
-### Architecture
+## Architecture
 
 ```
-User ↔ Next.js Chat UI ↔ AI SDK ↔ Claude Sonnet 4.5
-                                        ↓
-                                  Vercel Sandbox
-                              ┌─────────────────────┐
-                              │  Xvnc (:99)         │
-                              │  openbox             │
-                              │  Chrome              │
-                              │  websockify → noVNC  │
-                              └─────────────────────┘
-                                        ↓
-                              noVNC iframe in browser
+┌──────────────────────────────────────────────────────────────────┐
+│  Browser                                                         │
+│                                                                  │
+│  ┌─────────────────┐   messages   ┌──────────────────────────┐  │
+│  │   ChatArea       │ ──────────► │  useEventPipeline (hook) │  │
+│  │  (useChat hook)  │             │  parses UIMessage parts  │  │
+│  └────────┬─────────┘             └──────────┬───────────────┘  │
+│           │ POST /api/chat                    │ addEvent /       │
+│           │                                   │ updateEvent      │
+│           ▼                                   ▼                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              Zustand Stores                              │    │
+│  │  useAgentStore  — sessions, events, selectedEventId     │    │
+│  │  useSandboxStore — sandboxId, isInitializing            │    │
+│  └──────────────────┬──────────────────────────────────────┘    │
+│                     │                                            │
+│   ┌─────────────────┴────────────────┐                          │
+│   │          Right Panel             │                          │
+│   │  selectedEvent? → EventDetail    │                          │
+│   │  otherwise      → VNCViewer      │                          │
+│   │  (React.memo — no re-render on   │                          │
+│   │   unrelated state changes)       │                          │
+│   └──────────────────────────────────┘                          │
+└──────────────────────────────────────────────────────────────────┘
+         │ POST /api/chat (streaming)
+         ▼
+┌─────────────────────────────┐
+│  Next.js API Route          │
+│  app/api/chat/route.ts      │
+│                             │
+│  streamText(                │
+│    model: packyAnthropic(…) │  ◄─── PackyAPI proxy
+│    tools: {                 │       https://www.packyapi.com/v1
+│      computer, bash         │
+│    }                        │
+│  )                          │
+└──────────────┬──────────────┘
+               │ tool execution
+               ▼
+┌─────────────────────────────────────────────┐
+│  Vercel Sandbox (ephemeral Linux VM)         │
+│                                             │
+│  Xvnc  :99  (1024 × 768)                   │
+│  openbox  (window manager)                  │
+│  Google Chrome  (pre-launched)              │
+│  websockify → noVNC  (port 6080)            │
+│  ImageMagick import  (screenshots)          │
+│  xdotool  (mouse / keyboard)                │
+└─────────────────────────────────────────────┘
+               │ noVNC WebSocket
+               ▼
+        iframe in browser
 ```
 
-## Deploy Your Own
+---
 
-You can deploy your own version to Vercel by clicking the button below:
+## State Management
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?project-name=AI+SDK+Computer+Use+Demo&repository-name=ai-sdk-computer-use&repository-url=https%3A%2F%2Fgithub.com%2Fvercel-labs%2Fai-sdk-computer-use&demo-title=AI+SDK+Computer+Use+Demo&demo-url=https%3A%2F%2Fai-sdk-computer-use.vercel.app%2F&demo-description=A+chatbot+application+built+with+Next.js+demonstrating+Anthropic+Claude+Sonnet+4.5+computer+use+capabilities+with+Vercel+Sandboxes&env=ANTHROPIC_API_KEY,SANDBOX_SNAPSHOT_ID)
+Two purpose-built Zustand stores keep the UI reactive without prop drilling.
+
+### `useAgentStore` — agent sessions and events
+
+```
+AgentStore
+├── sessions: ChatSession[]          ← persisted to localStorage
+│   ├── id, title, createdAt
+│   ├── messages: ChatMessage[]
+│   └── events: AgentEvent[]
+├── activeSessionId: string | null
+├── selectedEventId: string | null   ← drives Detail View
+└── agentStatus: "idle" | "thinking" | "executing"
+```
+
+Key design decisions:
+
+- **`persist` middleware** serialises sessions to `localStorage` so history survives page reloads.
+- **`WeakMap` counter cache** — `getActiveSessionEventCounts` stores computed per-type counters keyed by the `events` array reference. Because Zustand produces a new array reference on every mutation, the cache stays consistent without a manual invalidation step.
+- **Stable selector references** — `getActiveSessionEvents`, `getSelectedEvent`, and `getActiveSessionEventCounts` are module-level functions rather than inline lambdas, preventing unnecessary re-renders in components that subscribe to them.
+
+### `useSandboxStore` — sandbox lifecycle
+
+A lightweight, non-persistent store that tracks the active sandbox ID and whether the desktop is still initialising, used by both `VNCViewer` and `ChatArea` to gate interactions.
+
+---
+
+## Event Pipeline
+
+`hooks/useEventPipeline.ts` is the bridge between the AI SDK's streaming `UIMessage` array and the typed event model the UI consumes.
+
+### Flow
+
+```
+useChat messages  →  useEventPipeline  →  useAgentStore
+ (UIMessage[])         (useEffect)        addEvent / updateEvent
+```
+
+### Two-pass event lifecycle
+
+Every tool invocation passes through the pipeline twice:
+
+| Pass | `state` | Action |
+|------|---------|--------|
+| 1st | `"call"` | `addEvent` with `status: "pending"` and call-time args |
+| 2nd | `"result"` | `updateEvent` with `status: "complete"`, duration, result data, and updated payload |
+
+A `processedIds` ref (`Set<string>`) keyed on `sessionId:messageId:toolCallId:state` prevents double-processing when React re-runs the effect.
+
+### Typed event mapping
+
+Each tool invocation is mapped to one of five strongly-typed `AgentEvent` variants:
+
+| Tool | Action | Mapped type |
+|------|--------|-------------|
+| `computer` | `screenshot` | `ScreenshotEvent` — extracts base64 → `data:image/png` URL |
+| `computer` | `left_click`, `double_click`, `right_click`, `mouse_move`, `scroll`, `left_click_drag` | `ClickEvent` — stores `x`, `y`, and action name |
+| `computer` | `type`, `key` | `TypeEvent` — stores the typed text or key sequence |
+| `computer` | `wait` | `BashEvent` — rendered as `sleep <duration>` |
+| `bash` | any | `BashEvent` — stores command, stdout, exit code |
+
+### Payload update on result
+
+When `updateEvent` fires on the result pass, it merges all typed fields **plus** the raw `payload` (containing the full result-state invocation). This ensures the Detail View's *Raw Payload* section always shows the actual result, not just the call snapshot.
+
+---
+
+## VNC Performance — `React.memo`
+
+`VNCViewer` is wrapped in `React.memo`:
+
+```tsx
+export const VNCViewer = memo(VNCViewerComponent);
+```
+
+The VNC stream lives inside an `<iframe>`. Without memoisation, any parent re-render (e.g. a new streaming token arriving in `ChatArea`) would cause React to reconcile the iframe, interrupting the WebSocket connection. `React.memo` prevents re-renders unless the component's own subscribed Zustand slices actually change.
+
+The component subscribes to exactly two store slices:
+- `useSandboxStore` — for the `streamUrl` and `isInitializing` flag.
+- `useAgentStore(getSelectedEvent)` — to switch between the VNC iframe and the `EventDetail` view.
+
+---
+
+## Project Structure
+
+```
+.
+├── app/
+│   ├── api/chat/route.ts        # streamText + computerTool + bashTool
+│   └── page.tsx                 # Root layout with resizable panels
+├── components/
+│   ├── chat/ChatArea.tsx        # useChat, sends sandboxId with every request
+│   ├── debug/DebugPanel.tsx     # Event list with type counters
+│   ├── message.tsx              # Per-message renderer, tool invocation cards
+│   ├── sidebar/Sidebar.tsx      # Session switcher
+│   └── vnc/VNCViewer.tsx        # VNC iframe + EventDetail
+├── hooks/
+│   └── useEventPipeline.ts      # UIMessage → AgentEvent transformer
+├── lib/
+│   └── sandbox/
+│       ├── tool.ts              # computerTool + bashTool (AI SDK tool() + Zod)
+│       └── utils.ts             # getDesktop, getDesktopURL, killDesktop
+├── store/
+│   ├── useAgentStore.ts         # Sessions, events, selection (persisted)
+│   └── useSandboxStore.ts       # Sandbox lifecycle (ephemeral)
+└── types/
+    └── events.ts                # AgentEvent discriminated union
+```
+
+---
 
 ## Running Locally
 
@@ -65,41 +209,39 @@ You can deploy your own version to Vercel by clicking the button below:
 - A [Vercel](https://vercel.com) account (for Sandbox access)
 - An [Anthropic API key](https://console.anthropic.com/)
 
-### 1. Install dependencies
+### 1. Clone and install
 
 ```bash
-pnpm install
+git clone https://github.com/your-username/ai-sdk-computer-use
+cd ai-sdk-computer-use
+yarn install
 ```
 
 ### 2. Set up Vercel credentials
 
-Install the [Vercel CLI](https://vercel.com/docs/cli) and link your project:
-
 ```bash
-pnpm install -g vercel
+npm install -g vercel
 vercel link
 vercel env pull
 ```
 
-This creates a `.env.local` file with `VERCEL_OIDC_TOKEN` for Sandbox authentication.
+This writes `VERCEL_OIDC_TOKEN` to `.env.local`. Alternatively, set `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, and `VERCEL_PROJECT_ID` manually.
 
-Alternatively, set `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, and `VERCEL_PROJECT_ID` manually in your `.env.local`.
+### 3. Create the sandbox snapshot
 
-### 3. Create a sandbox snapshot
-
-The snapshot pre-installs the desktop environment (Xvnc, Chrome, openbox, noVNC, xdotool, ImageMagick) so sandboxes boot in seconds.
+The snapshot pre-installs Xvnc, openbox, Chrome, noVNC, xdotool, and ImageMagick so sandboxes boot in seconds instead of minutes.
 
 ```bash
 npx tsx lib/sandbox/create-snapshot.ts
 ```
 
-This takes ~10 minutes. When done, it outputs a snapshot ID. Add it to your `.env.local`:
+This takes ~10 minutes. When complete it prints a snapshot ID — add it to `.env.local`:
 
 ```
 SANDBOX_SNAPSHOT_ID=snap_xxxxxxxxxxxxx
 ```
 
-### 4. Add your Anthropic API key
+### 4. Add remaining variables
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
@@ -108,20 +250,40 @@ ANTHROPIC_API_KEY=sk-ant-...
 ### 5. Start the dev server
 
 ```bash
-pnpm dev
+yarn dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to use the computer use agent.
+Open [http://localhost:3000](http://localhost:3000).
+
+---
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude |
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key — routed through PackyAPI |
 | `SANDBOX_SNAPSHOT_ID` | Yes | Vercel Sandbox snapshot with the desktop environment |
 | `VERCEL_OIDC_TOKEN` | Yes* | Auto-set by `vercel env pull` for Sandbox auth |
-| `VERCEL_TOKEN` | Alt* | Alternative to OIDC — a Vercel personal access token |
-| `VERCEL_TEAM_ID` | Alt* | Required with `VERCEL_TOKEN` |
-| `VERCEL_PROJECT_ID` | Alt* | Required with `VERCEL_TOKEN` |
+| `VERCEL_TOKEN` | Alt* | Alternative — a Vercel personal access token |
+| `VERCEL_TEAM_ID` | Alt* | Required alongside `VERCEL_TOKEN` |
+| `VERCEL_PROJECT_ID` | Alt* | Required alongside `VERCEL_TOKEN` |
 
-\* Either `VERCEL_OIDC_TOKEN` (via `vercel env pull`) or the `VERCEL_TOKEN` + team/project IDs are required for Sandbox authentication.
+\* Either `VERCEL_OIDC_TOKEN` (from `vercel env pull`) **or** the `VERCEL_TOKEN` + team/project pair is required.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 15 (App Router) |
+| AI SDK | Vercel AI SDK v4 (`ai`, `@ai-sdk/anthropic`) |
+| LLM | Claude Sonnet 4.6 via **PackyAPI** proxy |
+| Sandbox | `@vercel/sandbox` — ephemeral Linux VM |
+| VNC | noVNC + websockify (port 6080) |
+| State | Zustand 5 with `persist` middleware |
+| UI | Tailwind CSS v4, shadcn/ui, Radix UI, Lucide |
+| Panels | `react-resizable-panels` |
+| Animation | Motion (Framer Motion) |
+| Validation | Zod (tool parameter schemas) |
+| Language | TypeScript 5 |

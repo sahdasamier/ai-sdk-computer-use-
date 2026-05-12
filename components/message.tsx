@@ -25,11 +25,13 @@ const PurePreviewMessage = ({
   message,
   isLatestMessage,
   status,
+  onToolInvocationClick,
 }: {
   message: Message;
   isLoading: boolean;
   status: "error" | "submitted" | "streaming" | "ready";
   isLatestMessage: boolean;
+  onToolInvocationClick?: (id: string) => void;
 }) => {
   return (
     <AnimatePresence key={message.id}>
@@ -78,6 +80,7 @@ const PurePreviewMessage = ({
                 case "tool-invocation":
                   const { toolName, toolCallId, state, args } =
                     part.toolInvocation;
+                  const toolEventId = toolCallId;
 
                   if (toolName === "computer") {
                     const {
@@ -159,7 +162,16 @@ const PurePreviewMessage = ({
                         initial={{ y: 5, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         key={`message-${message.id}-part-${i}`}
-                        className="flex flex-col gap-2 p-2 mb-3 text-sm bg-zinc-50 dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800"
+                        className={cn(
+                          "flex flex-col gap-2 p-2 mb-3 text-sm bg-zinc-50 dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800",
+                          toolEventId && onToolInvocationClick
+                            ? "cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600"
+                            : "",
+                        )}
+                        onClick={() => {
+                          if (!toolEventId || !onToolInvocationClick) return;
+                          onToolInvocationClick(toolEventId);
+                        }}
                       >
                         <div className="flex-1 flex items-center justify-center">
                           <div className="flex items-center justify-center w-8 h-8 bg-zinc-50 dark:bg-zinc-800 rounded-full">
@@ -221,7 +233,16 @@ const PurePreviewMessage = ({
                         initial={{ y: 5, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         key={`message-${message.id}-part-${i}`}
-                        className="flex items-center gap-2 p-2 mb-3 text-sm bg-zinc-50 dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800"
+                        className={cn(
+                          "flex items-center gap-2 p-2 mb-3 text-sm bg-zinc-50 dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800",
+                          toolEventId && onToolInvocationClick
+                            ? "cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600"
+                            : "",
+                        )}
+                        onClick={() => {
+                          if (!toolEventId || !onToolInvocationClick) return;
+                          onToolInvocationClick(toolEventId);
+                        }}
                       >
                         <div className="flex items-center justify-center w-8 h-8 bg-zinc-50 dark:bg-zinc-800 rounded-full">
                           <ScrollText className="w-4 h-4" />

@@ -6,16 +6,14 @@ import type { AgentEvent } from "@/types/events";
 import { useAgentStore } from "@/store/useAgentStore";
 
 interface ToolInvocationLike {
-  toolCallId: string;
-  toolName: string;
-  state: "call" | "result";
-  args: unknown;
+  toolId?: string;
+  toolCallId?: string;
+  id?: string;
+  toolName?: string;
+  name?: string;
+  state?: "call" | "result" | string;
+  args?: unknown;
   result?: unknown;
-}
-
-interface ToolInvocationPartLike {
-  type: "tool-invocation";
-  toolInvocation: ToolInvocationLike;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -27,259 +25,208 @@ const getString = (value: unknown): string | undefined =>
 const getNumber = (value: unknown): number | undefined =>
   typeof value === "number" ? value : undefined;
 
-const getCoordinate = (value: unknown): [number, number] | undefined => {
-  if (!Array.isArray(value) || value.length < 2) return undefined;
-  const x = getNumber(value[0]);
-  const y = getNumber(value[1]);
-  if (x === undefined || y === undefined) return undefined;
-  return [x, y];
+const getInvocationId = (invocation: ToolInvocationLike): string | null =>
+  invocation.toolCallId ?? invocation.toolId ?? invocation.id ?? null;
+
+const getInvocationState = (
+  invocation: ToolInvocationLike,
+): "call" | "result" | null => {
+  if (invocation.state === "call" || invocation.state === "result") {
+    return invocation.state;
+  }
+  return null;
 };
 
-const isToolInvocationPartLike = (
-  part: unknown,
-): part is ToolInvocationPartLike => {
-  if (!isRecord(part) || part.type !== "tool-invocation") return false;
-  if (!isRecord(part.toolInvocation)) return false;
-
-  const invocation = part.toolInvocation;
-  return (
-    typeof invocation.toolCallId === "string" &&
-    typeof invocation.toolName === "string" &&
-    (invocation.state === "call" || invocation.state === "result")
-  );
-};
-
-const isToolInvocationLike = (
-  invocation: unknown,
-): invocation is ToolInvocationLike => {
-  if (!isRecord(invocation)) return false;
-  return (
-    typeof invocation.toolCallId === "string" &&
-    typeof invocation.toolName === "string" &&
-    (invocation.state === "call" || invocation.state === "result")
-  );
-};
+const getInvocationName = (invocation: ToolInvocationLike): string | null =>
+  invocation.toolName ?? invocation.name ?? null;
 
 const getMessageToolInvocations = (message: Message): ToolInvocationLike[] => {
   const invocations: ToolInvocationLike[] = [];
 
-  for (const invocation of message.toolInvocations ?? []) {
-    if (!isToolInvocationLike(invocation)) continue;
-    invocations.push(invocation);
+  // Only use parts to avoid duplicates — parts is the canonical source in AI SDK v4.
+  for (const part of message.parts ?? []) {
+    if (!isRecord(part) || part.type !== "tool-invocation") continue;
+    if (!isRecord(part.toolInvocation)) continue;
+    invocations.push(part.toolInvocation as ToolInvocationLike);
   }
 
-  if (invocations.length > 0) return invocations;
-
-  // Fallback for older message shapes where tool invocations are only in parts.
-  for (const part of message.parts ?? []) {
-    if (!isToolInvocationPartLike(part)) continue;
-    invocations.push(part.toolInvocation);
+  // Fall back to toolInvocations if parts produced nothing (older message shapes).
+  if (invocations.length === 0) {
+    for (const invocation of message.toolInvocations ?? []) {
+      if (isRecord(invocation)) {
+        invocations.push(invocation as ToolInvocationLike);
+      }
+    }
   }
 
   return invocations;
 };
 
 const isInvocationError = (result: unknown): boolean => {
+  if (!result) return false;
   if (result === "User aborted") return true;
   if (!isRecord(result)) return false;
-
   if (result.isError === true) return true;
   if (typeof result.error === "string" && result.error.length > 0) return true;
   if (typeof result.stderr === "string" && result.stderr.length > 0) return true;
-
   return false;
 };
 
+const getEventStatus = (
+  state: "call" | "result",
+  result: unknown,
+): "pending" | "complete" | "error" =>
+  state === "call" ? "pending" : isInvocationError(result) ? "error" : "complete";
+
 const mapInvocationToEvent = (
   invocation: ToolInvocationLike,
+  id: string,
+  messageId: string,
+  state: "call" | "result",
   timestamp: number,
 ): AgentEvent | null => {
-  const status = invocation.state === "call"
-    ? "pending"
-    : isInvocationError(invocation.result)
-      ? "error"
-      : "complete";
+  const toolName = getInvocationName(invocation);
+  if (!toolName) return null;
 
-  if (invocation.toolName === "bash") {
+  const status = getEventStatus(state, invocation.result);
+
+  if (toolName === "bash") {
     const args = isRecord(invocation.args) ? invocation.args : {};
-    const command = getString(args.command) ?? "unknown";
     const result = isRecord(invocation.result) ? invocation.result : {};
 
     return {
-      id: invocation.toolCallId,
+      id,
+      messageId,
       timestamp,
       type: "bash",
       status,
-      command,
+      command: getString(args.command) ?? "unknown",
       output: getString(result.stdout) ?? getString(result.output),
       exitCode: getNumber(result.exitCode) ?? getNumber(result.code),
+      payload: { invocation },
     };
   }
 
-  if (invocation.toolName !== "computer") {
-    if (invocation.toolName === "str_replace_editor") {
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "browser_action",
-        status,
-        action: "other",
-        detail: "str_replace_editor",
-      };
-    }
-    return null;
-  }
+  if (toolName !== "computer") return null;
 
   const args = isRecord(invocation.args) ? invocation.args : null;
-  const action = args ? getString(args.action) : undefined;
-  if (!args || !action) return null;
+  if (!args) return null;
 
-  const coordinate = getCoordinate(args.coordinate);
-  const text = getString(args.text) ?? "";
-  const result = isRecord(invocation.result) ? invocation.result : {};
+  const action = getString(args.action);
+  if (!action) return null;
 
-  switch (action) {
-    case "screenshot": {
-      const imageData = getString(result.data);
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "screenshot",
-        status,
-        imageUrl: imageData ? `data:image/png;base64,${imageData}` : "",
-        width: 1024,
-        height: 768,
-      };
-    }
-    case "click":
-    case "left_click":
-    case "right_click":
-    case "double_click":
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "click",
-        status,
-        target: action,
-        x: coordinate?.[0] ?? 0,
-        y: coordinate?.[1] ?? 0,
-      };
-    case "type":
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "type",
-        status,
-        target: "active-element",
-        value: text,
-      };
-    case "scroll":
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "browser_action",
-        status,
-        action: "scroll",
-        detail: "computer:scroll",
-      };
-    case "navigate":
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "browser_action",
-        status,
-        action: "navigate",
-        url: getString(args.url),
-      };
-    case "back":
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "browser_action",
-        status,
-        action: "back",
-      };
-    case "forward":
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "browser_action",
-        status,
-        action: "forward",
-      };
-    case "reload":
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "browser_action",
-        status,
-        action: "reload",
-      };
-    default:
-      return {
-        id: invocation.toolCallId,
-        timestamp,
-        type: "browser_action",
-        status,
-        action: "other",
-        detail: `computer:${action}`,
-      };
+  if (
+    action === "click" ||
+    action === "left_click" ||
+    action === "right_click" ||
+    action === "double_click" ||
+    action === "mouse_move" ||
+    action === "scroll" ||
+    action === "left_click_drag"
+  ) {
+    const coordinate = Array.isArray(args.coordinate) ? args.coordinate : null;
+    const x = coordinate ? getNumber(coordinate[0]) ?? 0 : 0;
+    const y = coordinate ? getNumber(coordinate[1]) ?? 0 : 0;
+
+    return {
+      id,
+      messageId,
+      timestamp,
+      type: "click",
+      status,
+      target: action,
+      x,
+      y,
+      payload: { invocation },
+    };
   }
+
+  if (action === "type" || action === "key") {
+    return {
+      id,
+      messageId,
+      timestamp,
+      type: "type",
+      status,
+      target: action === "key" ? "keyboard" : "active-element",
+      value: getString(args.text) ?? "",
+      payload: { invocation },
+    };
+  }
+
+  if (action === "wait") {
+    return {
+      id,
+      messageId,
+      timestamp,
+      type: "bash",
+      status,
+      command: `sleep ${getNumber(args.duration) ?? 1}`,
+      payload: { invocation },
+    };
+  }
+
+  if (action === "screenshot") {
+    // Result from standard tool is an array: [{ type: "image", image: base64Data }]
+    // OR redacted text string from prunedMessages.
+    const result = invocation.result;
+    let imageData: string | undefined;
+
+    if (Array.isArray(result)) {
+      const imagePart = result.find(
+        (p) => isRecord(p) && p.type === "image",
+      ) as Record<string, unknown> | undefined;
+      // `image` field from standard tool() return, `data` from legacy provider tool
+      imageData =
+        getString(imagePart?.image) ??
+        getString(imagePart?.data);
+    } else if (isRecord(result)) {
+      imageData = getString(result.data) ?? getString(result.image);
+    }
+
+    return {
+      id,
+      messageId,
+      timestamp,
+      type: "screenshot",
+      status,
+      imageUrl: imageData ? `data:image/png;base64,${imageData}` : "",
+      width: 1024,
+      height: 768,
+      payload: { invocation },
+    };
+  }
+
+  return null;
 };
 
 const getEventUpdates = (event: AgentEvent, duration: number): Partial<AgentEvent> => {
-  switch (event.type) {
-    case "bash":
-      return {
-        status: event.status,
-        duration,
-        output: event.output,
-        exitCode: event.exitCode,
-      };
-    case "screenshot":
-      return {
-        status: event.status,
-        duration,
-        imageUrl: event.imageUrl,
-        width: event.width,
-        height: event.height,
-      };
-    case "click":
-      return {
-        status: event.status,
-        duration,
-        target: event.target,
-        x: event.x,
-        y: event.y,
-      };
-    case "type":
-      return {
-        status: event.status,
-        duration,
-        target: event.target,
-        value: event.value,
-      };
-    case "browser_action":
-      return {
-        status: event.status,
-        duration,
-        action: event.action,
-        url: event.url,
-        detail: event.detail,
-      };
-  }
+  // Always carry the latest payload (contains result invocation data).
+  const base = { status: event.status, duration, payload: event.payload };
 
-  return { duration };
+  if (event.type === "bash") {
+    return { ...base, output: event.output, exitCode: event.exitCode };
+  }
+  if (event.type === "click") {
+    return { ...base, target: event.target, x: event.x, y: event.y };
+  }
+  if (event.type === "type") {
+    return { ...base, target: event.target, value: event.value };
+  }
+  if (event.type === "screenshot") {
+    return { ...base, imageUrl: event.imageUrl, width: event.width, height: event.height };
+  }
+  return base;
 };
 
 export const useEventPipeline = (
   messages: Message[],
   activeSessionId: string | null,
 ) => {
-  const processedToolCalls = useRef<Set<string>>(new Set());
+  const processedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    processedToolCalls.current.clear();
+    processedIds.current.clear();
   }, [activeSessionId]);
 
   useEffect(() => {
@@ -293,20 +240,31 @@ export const useEventPipeline = (
     for (const message of messages) {
       const invocations = getMessageToolInvocations(message);
       for (const invocation of invocations) {
-        const processedKey = `${activeSessionId}_${invocation.toolCallId}_${invocation.state}`;
-        if (processedToolCalls.current.has(processedKey)) continue;
+        const toolId = getInvocationId(invocation);
+        const state = getInvocationState(invocation);
+        if (!toolId || !state) continue;
 
-        const existingEvent = eventIndex.get(invocation.toolCallId);
+        const key = `${activeSessionId}:${message.id}:${toolId}:${state}`;
+        if (processedIds.current.has(key)) continue;
+
         const now = Date.now();
-        const mappedEvent = mapInvocationToEvent(invocation, now);
+        const mappedEvent = mapInvocationToEvent(
+          invocation,
+          toolId,
+          message.id,
+          state,
+          now,
+        );
         if (!mappedEvent) continue;
+        processedIds.current.add(key);
 
-        if (invocation.state === "call") {
+        const existingEvent = eventIndex.get(toolId);
+
+        if (state === "call") {
           if (!existingEvent) {
             addEvent(activeSessionId, mappedEvent);
             eventIndex.set(mappedEvent.id, mappedEvent);
           }
-          processedToolCalls.current.add(processedKey);
           continue;
         }
 
@@ -319,14 +277,12 @@ export const useEventPipeline = (
             getEventUpdates(nextEvent, duration),
           );
           eventIndex.set(nextEvent.id, nextEvent);
-          processedToolCalls.current.add(processedKey);
         } else {
           const completedEvent = { ...mappedEvent, duration: 0 };
           addEvent(activeSessionId, completedEvent);
           eventIndex.set(completedEvent.id, completedEvent);
-          processedToolCalls.current.add(processedKey);
         }
       }
     }
-  }, [activeSessionId, messages]);
+  }, [messages, activeSessionId]);
 };

@@ -7,6 +7,8 @@ export interface BaseEvent {
   timestamp: number;
   status: EventStatus;
   duration?: number;
+  messageId?: string;
+  payload?: unknown;
 }
 
 export interface ClickEvent extends BaseEvent {

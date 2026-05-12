@@ -55,7 +55,7 @@ lib.XCloseDisplay(d)`,
       env: DISPLAY_ENV,
     });
 
-    // Launch Chrome so the AI has a browser to work with immediately
+    // Launch Chrome and wait until its window is visible on the display.
     await sandbox.runCommand({
       cmd: "bash",
       args: [
@@ -66,12 +66,35 @@ lib.XCloseDisplay(d)`,
       detached: true,
     });
 
+    // Poll until Chrome window appears (up to 10 s) so the first screenshot is never blank.
+    await waitForChromeWindow(sandbox);
+
     return sandbox;
   } catch (error) {
     console.error("Error in getDesktop:", error);
     throw error;
   }
 };
+
+async function waitForChromeWindow(sandbox: Sandbox, maxRetries = 20) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const result = await sandbox.runCommand({
+        cmd: "bash",
+        args: ["-c", "DISPLAY=:99 xdotool search --onlyvisible --class chrome 2>/dev/null | head -1"],
+        env: { DISPLAY: ":99" },
+      });
+      const windowId = await result.stdout();
+      if (windowId.trim()) {
+        return; // Chrome window is visible
+      }
+    } catch {
+      // not ready yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  // Give up and proceed — the AI can retry a screenshot if needed
+}
 
 async function waitForNoVNC(sandbox: Sandbox, maxRetries = 20) {
   for (let i = 0; i < maxRetries; i++) {

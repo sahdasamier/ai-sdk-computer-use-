@@ -11,14 +11,20 @@ export function Sidebar() {
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
   const createSession = useAgentStore((state) => state.createSession);
   const switchSession = useAgentStore((state) => state.switchSession);
-  const hasInitialized = useRef(false);
+  const hasAttemptedInit = useRef(false);
 
   useEffect(() => {
-    if (sessions.length === 0 && !hasInitialized.current) {
-      hasInitialized.current = true;
-      createSession("Session 1");
+    if (sessions.length === 0 && !hasAttemptedInit.current) {
+      hasAttemptedInit.current = true;
+      // Delay slightly to ensure Zustand is ready
+      setTimeout(() => {
+        if (useAgentStore.getState().sessions.length === 0) {
+          createSession("Initial Session");
+        }
+      }, 500);
     }
-  }, [createSession, sessions.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCreateSession = () => {
     createSession(`Session ${sessions.length + 1}`);

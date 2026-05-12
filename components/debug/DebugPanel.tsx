@@ -76,6 +76,8 @@ const formatTime = (timestamp: number): string =>
 export function DebugPanel() {
   const counts = useActiveSessionEventCounts();
   const activeEvents = useAgentStore(getActiveSessionEvents);
+  const selectedEventId = useAgentStore((state) => state.selectedEventId);
+  const setSelectedEventId = useAgentStore((state) => state.setSelectedEventId);
   const sortedEvents = [...activeEvents].sort((a, b) => a.timestamp - b.timestamp);
 
   return (
@@ -113,7 +115,12 @@ export function DebugPanel() {
         {sortedEvents.map((event) => (
           <div
             key={event.id}
-            className="rounded-md border border-zinc-800 bg-zinc-900/70 p-2"
+            onClick={() => setSelectedEventId(event.id)}
+            className={`cursor-pointer rounded-md border bg-zinc-900/70 p-2 ${
+              selectedEventId === event.id
+                ? "border-emerald-500"
+                : "border-zinc-800 hover:border-zinc-600"
+            }`}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
