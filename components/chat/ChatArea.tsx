@@ -13,7 +13,7 @@ import { ABORTED } from "@/lib/utils";
 import { useAgentStore } from "@/store/useAgentStore";
 import { useSandboxStore } from "@/store/useSandboxStore";
 
-export function ChatArea() {
+function ChatAreaInner() {
   const sandboxId = useSandboxStore((state) => state.sandboxId);
   const isInitializing = useSandboxStore((state) => state.isInitializing);
   const activeSessionId = useAgentStore((state) => state.activeSessionId);
@@ -120,4 +120,9 @@ export function ChatArea() {
       </div>
     </div>
   );
+}
+
+export function ChatArea() {
+  const activeSessionId = useAgentStore((state) => state.activeSessionId);
+  return <ChatAreaInner key={activeSessionId ?? "no-session"} />;
 }
