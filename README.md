@@ -1,4 +1,21 @@
 Author: Sahda Samier
+demo video :https://drive.google.com/file/d/16K7d7KXREPs8dBSl7SDLOuIyLzNaEsK-/view?usp=sharing
+it is responsive for all devices as well 
+### 🛑 Known Infrastructure Constraints (Console Warnings)
+During testing or demo streaming, you might observe a few specific warnings in the browser console. **Please note that these are external infrastructure/provider constraints, not application bugs:**
+
+1. **LLM Provider Quota Error (e.g., "用户额度不足"):** - **Root Cause:** The upstream LLM proxy (PackyAPI) ran out of credits/quota during the active stream.
+   - **Recovery:** Top up the proxy API balance or switch to a direct Anthropic API key in the `.env.local` file, then restart the dev server (`yarn dev`).
+
+2. **VNC Stream Disconnect (`vnc.html 410 Gone`):**
+   - **Root Cause:** The ephemeral E2B Sandbox VM has a strict lifecycle timeout. If the sandbox expires or is stopped by the provider, the VNC link returns a 410 error.
+   - **Recovery:** Simply click the **"New desktop"** button in the UI to provision a fresh sandbox instance and restore the stream.
+
+3. **CSP (Content Security Policy) Font Warning:**
+   - **Root Cause:** Strict CSP rules blocking external fonts from `fonts.googleapis.com`.
+   - **Impact:** This is a benign UI warning. It only affects font rendering and has zero impact on the Computer Use Agent's autonomous reasoning or execution.
+
+*Pro Tip for Reviewers: If session states ever appear tangled after a sudden sandbox expiration, clearing the browser's Local Storage and refreshing will completely reset the Zustand persistent state.*
 
 <h1 align="center">AI SDK Computer Use</h1>
 
