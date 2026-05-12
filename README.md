@@ -1,3 +1,4 @@
+Author: Sahda Samier
 <a href="https://ai-sdk-computer-use.vercel.app">
   <h1 align="center">AI SDK Computer Use Demo</h1>
 </a>
